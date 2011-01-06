@@ -4,21 +4,6 @@
 
 extern void returnFromException(void);
 
-/* 
- * haltExecutionAndWait: this function waits for a resume instruction before continueing execution
- */
-static void haltExecutionAndWait(void)
-{
-	//Wait for a command from client before continuing
-	haltState = 1;
-	waitForClientInput = 1;
-	do
-	{
-		execRemoteCmd();
-	}while(haltState);
-	//We have received a command and the command wants to resume execution
-}
-
 /*
  * conditionalBranchParse: this tests for BEQ BEQL BGTZ BGTZL BLEZ BLEZL BNE BNEL branches.
  */

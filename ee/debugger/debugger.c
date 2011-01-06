@@ -143,6 +143,8 @@ typedef struct {
 #define REMOTE_CMD_ADDRAWCODES		0x601
 #define REMOTE_CMD_CLEARRAWCODES	0x602
 
+/* poll until client input received */
+static int waitForClientInput = 0;
 /* to control Halted/Resumed game state */
 static int haltState = 0;
 
@@ -628,6 +630,21 @@ void NewSifSetReg(u32 regnum, int regval)
 	EI();
 }
 
+/* 
+ * haltExecutionAndWait: this function waits for a resume instruction before continueing execution
+ */
+static void haltExecutionAndWait(void)
+{
+	//Wait for a command from client before continuing
+	haltState = 1;
+	waitForClientInput = 1;
+	do
+	{
+		execRemoteCmd();
+	}while(haltState);
+	//We have received a command and the command wants to resume execution
+}
+
 /*
  * read_mem: this function reads memory
  */
@@ -706,67 +723,72 @@ static int execRemoteCmd(void)
 	if (g_debugger_opts.rpc_mode == -1)
 		return 0;
 
-	/* get the remote command by RPC */
-	rpcNTPBgetRemoteCmd(&remote_cmd, cmd_buf, &size, g_debugger_opts.rpc_mode);
-	rpcNTPBSync(0, NULL, &ret);
+	do
+	{
+		/* get the remote command by RPC */
+		rpcNTPBgetRemoteCmd(&remote_cmd, cmd_buf, &size, g_debugger_opts.rpc_mode);
+		rpcNTPBSync(0, NULL, &ret);
 
-	if (remote_cmd != REMOTE_CMD_NONE) {
-		/* handle Dump requests */
-		if (remote_cmd == REMOTE_CMD_DUMP) {
-			sendDump(*((u32 *)&cmd_buf[0]), *((u32 *)&cmd_buf[4]));
-		}
-		/* handle Halt request */
-		else if (remote_cmd == REMOTE_CMD_HALT) {
-			rpcNTPBEndReply(g_debugger_opts.rpc_mode);
-			rpcNTPBSync(0, NULL, &ret);
-			if (!haltState) {
-				haltState = 1;
-				while (haltState)
-					execRemoteCmd();
+		if (remote_cmd != REMOTE_CMD_NONE) {
+		
+			waitForClientInput = 1;
+			
+			/* handle Dump requests */
+			if (remote_cmd == REMOTE_CMD_DUMP) {
+				sendDump(*((u32 *)&cmd_buf[0]), *((u32 *)&cmd_buf[4]));
+			}
+			/* handle Halt request */
+			else if (remote_cmd == REMOTE_CMD_HALT) {
+				rpcNTPBEndReply(g_debugger_opts.rpc_mode);
+				rpcNTPBSync(0, NULL, &ret);
+				if (!haltState) {
+					haltState = 1;
+					while (haltState)
+						execRemoteCmd();
+				}
+			}
+			/* handle Resume request */
+			else if (remote_cmd == REMOTE_CMD_RESUME) {
+				rpcNTPBEndReply(g_debugger_opts.rpc_mode);
+				rpcNTPBSync(0, NULL, &ret);
+				if (haltState) {
+					haltState = 0;
+				}
+			}
+			/* handle raw mem patches adding */
+			else if (remote_cmd == REMOTE_CMD_ADDMEMPATCHES) {
+				rpcNTPBEndReply(g_debugger_opts.rpc_mode);
+				rpcNTPBSync(0, NULL, &ret);
+				/*
+				 * TODO ...
+				 */
+			}
+			/* handle raw mem patches clearing */
+			else if (remote_cmd == REMOTE_CMD_CLEARMEMPATCHES) {
+				rpcNTPBEndReply(g_debugger_opts.rpc_mode);
+				rpcNTPBSync(0, NULL, &ret);
+				/*
+				 * TODO ...
+				 */
+			}
+			/* handle codes adding */
+			else if (remote_cmd == REMOTE_CMD_ADDRAWCODES) {
+				rpcNTPBEndReply(g_debugger_opts.rpc_mode);
+				rpcNTPBSync(0, NULL, &ret);
+				/*
+				 * TODO ...
+				 */
+			}
+			/* handle codes clearing */
+			else if (remote_cmd == REMOTE_CMD_CLEARRAWCODES) {
+				rpcNTPBEndReply(g_debugger_opts.rpc_mode);
+				rpcNTPBSync(0, NULL, &ret);
+				/*
+				 * TODO ...
+				 */
 			}
 		}
-		/* handle Resume request */
-		else if (remote_cmd == REMOTE_CMD_RESUME) {
-			rpcNTPBEndReply(g_debugger_opts.rpc_mode);
-			rpcNTPBSync(0, NULL, &ret);
-			if (haltState) {
-				haltState = 0;
-			}
-		}
-		/* handle raw mem patches adding */
-		else if (remote_cmd == REMOTE_CMD_ADDMEMPATCHES) {
-			rpcNTPBEndReply(g_debugger_opts.rpc_mode);
-			rpcNTPBSync(0, NULL, &ret);
-			/*
-			 * TODO ...
-			 */
-		}
-		/* handle raw mem patches clearing */
-		else if (remote_cmd == REMOTE_CMD_CLEARMEMPATCHES) {
-			rpcNTPBEndReply(g_debugger_opts.rpc_mode);
-			rpcNTPBSync(0, NULL, &ret);
-			/*
-			 * TODO ...
-			 */
-		}
-		/* handle codes adding */
-		else if (remote_cmd == REMOTE_CMD_ADDRAWCODES) {
-			rpcNTPBEndReply(g_debugger_opts.rpc_mode);
-			rpcNTPBSync(0, NULL, &ret);
-			/*
-			 * TODO ...
-			 */
-		}
-		/* handle codes clearing */
-		else if (remote_cmd == REMOTE_CMD_CLEARRAWCODES) {
-			rpcNTPBEndReply(g_debugger_opts.rpc_mode);
-			rpcNTPBSync(0, NULL, &ret);
-			/*
-			 * TODO ...
-			 */
-		}
-	}
-
+	}while(waitForClientInput);
 	return 1;
 }
 
