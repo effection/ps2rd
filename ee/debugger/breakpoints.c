@@ -1,4 +1,4 @@
-/*#include <tamtypes.h>
+#include <tamtypes.h>
 #include <kernel.h>
 #include <iopheap.h>
 #include <iopcontrol.h>
@@ -10,8 +10,23 @@
 #include <io_common.h>
 #include <fileio.h>
 #include <sbv_patches.h>
-#include <debug.h>*/
+#include <debug.h>
 #include "breakpoints.h"
+
+/* 
+ * haltExecutionAndWait: this function waits for a resume instruction before continueing execution
+ */
+static void haltExecutionAndWait(void)
+{
+	//Wait for a command from client before continuing
+	haltState = 1;
+	waitForClientInput = 1;
+	do
+	{
+		execRemoteCmd();
+	}while(haltState);
+	//We have received a command and the command wants to resume execution
+}
 
 /*
  * conditionalBranchParse: this tests for BEQ BEQL BGTZ BGTZL BLEZ BLEZL BNE BNEL branches.
@@ -344,22 +359,33 @@ static u32 isBranchOrJump(u32 addr, u32 instr, u32* conditional, u32* link, u32*
 	return branch;*/
 }
 /*
- * lv1Debugger: this function sends required information to client depending on
+ * exceptionDebugger: this function sends required information to client depending on
  * 					the breakpoint event and waits for an instruction to resume
  */
-static void lv1Debugger(u32 cause, u32 badvaddr, u32 status, u32 epc, cpuRegisters *regs)
+static void exceptionDebugger(u32 exceptionLevel)
 {
 	FlushCache(0);
     FlushCache(2);
 
-	int exceptionNumber = (cause & 0x7c) >> 2;//regs->CP0.n.Cause.bits.ExcCode
+	u32 epc;
+	u32 exceptionNumber;
+	
+	if(exceptionLevel == 1)
+	{
+		epc = cpuRegs.CP0.n.EPC;
+		exceptionNumber = cpuRegs.CP0.n.Cause.bits.ExcCode;
+	}else
+	{
+		epc = cpuRegs.CP0.n.ErrorEPC;
+		exceptionNumber = cpuRegs.CP0.n.Cause.bits.EXC2;
+	} 
 
 	//Calculate new return address and store it back to the EPC
 	//Check branch delay bit
-	if(regs->CP0.n.Cause.bits.BD == 0)
+	if(cpuRegs.CP0.n.Cause.bits.BD == 0)
 	{
 		//Just add 4 to the EPC
-		regs->CP0.n.EPC += 0x4;
+		cpuRegs.CP0.n.EPC += 0x4;
 	}else
 	{
 		//We are in a branch delay slot.
@@ -374,34 +400,43 @@ static void lv1Debugger(u32 cause, u32 badvaddr, u32 status, u32 epc, cpuRegiste
 			if(conditionalJump)
 			{
 				if(conditionMet)
-					regs->CP0.n.EPC = targetAddress;
+					cpuRegs.CP0.n.EPC = targetAddress;
 				else
-					regs->CP0.n.EPC = bdSlotAddr + 0x4;
+					cpuRegs.CP0.n.EPC = bdSlotAddr + 0x4;
 			}else
-				regs->CP0.n.EPC = targetAddress;
+				cpuRegs.CP0.n.EPC = targetAddress;
 		}else
 		{
 			//WTF! May have missed/messed up parsing of certain branch instruction
 			//For now force execution to pause 
-			exceptionNumber = 9;
+			haltExecutionAndWait();
 		}
 	}
 	
 	//Check for sw breakpoint. lv2handler will handle hardware breakpoints and Performance Counters (for single stepping)
-	if(exceptionNumber == 9)
+	if(exceptionLevel == 1)
 	{
-		//Send address of hit
-		//Send word from address
-		//TODO send next X amount of addresses for convenience of viewing on client?
-		//send registers
-
-		//Wait for a command from client before continuing
-		waitForClientInput = 1;
-		do
+		//Break and traps
+		if(exceptionNumber == 9 || exceptionNumber == 13)
 		{
-			execRemoteCmd();
-		}while(haltState);
-		//We have received a command and the command wants to resume execution
+			//Send address of hit
+			//Send word from address
+			//TODO send next X amount of addresses for convenience of viewing on client?
+			//send registers
+			haltExecutionAndWait();
+		}
+	}else
+	{
+		//Performance Counter exception
+		if(exceptionNumber == 2)
+		{
+			
+		}
+		//Debug
+		else if(exceptionNumber == 3)
+		{
+			
+		}
 	}
 	//Restore all the registers from before the exception handler called here
 	//Set PC to be the line that should have been executed after the exception handler and execute

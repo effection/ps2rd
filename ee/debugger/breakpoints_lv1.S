@@ -105,13 +105,8 @@ lv1ExceptionHandler:
         la 		gp, _gp                 # Use exception handlers _gp TODO sort out GP
         
         # Return from exception and start debugger
-        mfc0    a0, Cause               # arg0
-        mfc0    a1, BadVAddr
-        mfc0    a2, Status
-        mfc0    a3, EPC
-        addu    t0, zero, k0            # arg4 = registers
-        move    t1, sp
-        la      k0, lv1Debugger
+        daddiu	a0, zero, 1				# arg0 - exception level
+        la      k0, exceptionDebugger
         mtc0    k0, EPC                 # eret return address
         sync.p
         mfc0    k0, Status              # check this out..
