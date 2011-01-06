@@ -18,6 +18,8 @@ EE_OBJS += loadmodule_hooks.o
 EE_OBJS += padread_hooks.o
 EE_OBJS += pattern.o
 EE_OBJS += syscall_hooks.S
+EE_OBJS += dbg_exception_handler.o
+EE_OBJS += exception_handler.o
 
 ifeq ($(DEBUG),1)
 EE_CFLAGS += -D_DEBUG
