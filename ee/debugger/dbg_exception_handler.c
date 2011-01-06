@@ -1,17 +1,8 @@
 #include <tamtypes.h>
 #include <kernel.h>
-#include <iopheap.h>
-#include <iopcontrol.h>
-#include <loadfile.h>
-#include <sifdma.h>
-#include <sifrpc.h>
-#include <string.h>
-#include <syscallnr.h>
-#include <io_common.h>
-#include <fileio.h>
-#include <sbv_patches.h>
-#include <debug.h>
-#include "breakpoints.h"
+#include "dbg_exception_handler.h"
+
+extern void returnFromException(void);
 
 /* 
  * haltExecutionAndWait: this function waits for a resume instruction before continueing execution
@@ -366,7 +357,9 @@ static void exceptionDebugger(u32 exceptionLevel)
 {
 	FlushCache(0);
     FlushCache(2);
-
+	//Exception level is 0 or 1; This just makes the IF statements look more logical below
+	exceptionLevel++;
+	
 	u32 epc;
 	u32 exceptionNumber;
 	
@@ -385,11 +378,10 @@ static void exceptionDebugger(u32 exceptionLevel)
 	if(cpuRegs.CP0.n.Cause.bits.BD == 0)
 	{
 		//Just add 4 to the EPC
-		cpuRegs.CP0.n.EPC += 0x4;
+		epc += 0x4;
 	}else
 	{
 		//We are in a branch delay slot.
-		u32 bdSlotAddr = epc + 0x4;
 		
 		u32 conditionalJump, linkedJump, targetAddress, conditionMet;
 		
@@ -400,11 +392,11 @@ static void exceptionDebugger(u32 exceptionLevel)
 			if(conditionalJump)
 			{
 				if(conditionMet)
-					cpuRegs.CP0.n.EPC = targetAddress;
+					epc = targetAddress;
 				else
-					cpuRegs.CP0.n.EPC = bdSlotAddr + 0x4;
+					epc += 0x8;
 			}else
-				cpuRegs.CP0.n.EPC = targetAddress;
+				epc = targetAddress;
 		}else
 		{
 			//WTF! May have missed/messed up parsing of certain branch instruction
@@ -412,6 +404,13 @@ static void exceptionDebugger(u32 exceptionLevel)
 			haltExecutionAndWait();
 		}
 	}
+	//Store epc correctly
+	if(exceptionLevel == 1)
+		cpuRegs.CP0.n.EPC = epc;
+	else
+		cpuRegs.CP0.n.ErrorEPC = epc;
+	
+	/* Do debugging here */
 	
 	//Check for sw breakpoint. lv2handler will handle hardware breakpoints and Performance Counters (for single stepping)
 	if(exceptionLevel == 1)
@@ -440,5 +439,5 @@ static void exceptionDebugger(u32 exceptionLevel)
 	}
 	//Restore all the registers from before the exception handler called here
 	//Set PC to be the line that should have been executed after the exception handler and execute
-	returnFromLv1Exception();
+	returnFromException();
 }

@@ -5,7 +5,7 @@
  * details.
  */
  
- /* Ever slightly modified by effection */
+ /* Slightly modified by effection */
 
 # ASM exception handlers
 
@@ -21,15 +21,17 @@
         .global cpuRegs
      
         # Save all user regs
-        # Save HI/LO, SR, BadVAddr, Cause, EPC
+        # Save HI/LO, SR, BadVAddr, Cause, EPC, ErrorPC
         # ShiftAmount, cop0: $24, $25
         # Save float regs??
-        # Set EPC to debugger
+        # Set EPC/ErrorPC to debugger
         # Set stack to 'exception stack'
         # eret
-        .global lv1ExceptionHandler
-        .ent	lv1ExceptionHandler
-lv1ExceptionHandler:
+        .global exceptionHandler
+        .ent	exceptionHandler
+exceptionHandler:
+		# Preserve k0 before it is mangled
+		sq 		k0, 0xfff0(zero)
         la      k0, cpuRegs
         sq      zero,0x00(k0)
         sq      at,  0x10(k0)
@@ -63,8 +65,8 @@ lv1ExceptionHandler:
         sq      t8,  0x180(k0)
         sq      t9,  0x190(k0)
         # k0, k1, gp,  sp, fp, ra
-#       sq      k0,  0x1a0(k0)		# $k0
-        sq      zero,0x1a0(k0)		# zero instead
+		lq 		t0,  0xfff0(zero)	# $k0
+        sq      t0,  0x1a0(k0)		# $k0
         sq      k1,  0x1b0(k0)
         sq      gp,  0x1c0(k0)
         sq      sp,  0x1d0(k0) 
@@ -82,9 +84,9 @@ lv1ExceptionHandler:
 		# Store BadBAddr @ (0x224 + (8 * 4))(k0)
 		mfc0    t0, BadVAddr
 		# Store Status @ (0x224 + (12 * 4))(k0)
-		mfc0    t1, Status
+		mfc0    t2, Status
 		sw      t0, 0x244(k0)
-        sw      t1, 0x254(k0)
+        sw      t2, 0x254(k0)
 		# Store Cause @ (0x224 + (13 * 4))(k0)
 		mfc0    t0, Cause
 		# Store EPC @ (0x224 + (14 * 4))(k0)
@@ -99,15 +101,33 @@ lv1ExceptionHandler:
         mfc0    t1, PerfCnt
         sw      t0, 0x284(k0)
         sw      t1, 0x288(k0)
+		# Store ErrorPC @ (0x224 + (30 * 4))(k0)
+		mfc0	t0, ErrorPC
+		sw      t0, 0x29C(k0)
 
         # Use our own stack..
         la      sp, _exceptionStack+0x2000-16
-        la 		gp, _gp                 # Use exception handlers _gp TODO sort out GP
+        la 		gp, _gp                 # Use exception handlers _gp TODO ??
         
-        # Return from exception and start debugger
-        daddiu	a0, zero, 1				# arg0 - exception level
-        la      k0, exceptionDebugger
-        mtc0    k0, EPC                 # eret return address
+		# Find out if it is a level 1 exception or level 2 error
+		la      k0, exceptionDebugger
+		srl		t0, t2, 1
+		andi	t1, t0, 0x1
+		beq		t1, zero, _lv2Error
+		daddiu	a0, zero, 1				# arg0 - exception level 2
+_lv1Exception:
+		mtc0    k0, EPC                 # eret return address
+		beq		zero, zero, _callDebugger
+		daddiu	a0, zero, 0				# arg0 - exception level 1
+_lv2Error:
+		# Assume that since level 1 EXL bit wasn't set this is a level 2. 
+		# Level 1 has priority in terms that level 1 exceptions can occur within a level 2 but all level 2 errors are disabled in a level 2.
+		mtc0    k0, ErrorPC             # eret return address
+        
+_callDebugger:
+		# Store exception level for returning from debugger
+		sw		a0, _exceptionLevel
+		# Return from exception and start debugger
         sync.p
         mfc0    k0, Status              # check this out..
         li      v0, 0xfffffffe
@@ -120,17 +140,17 @@ lv1ExceptionHandler:
         nop
         eret
         nop
-        .end	lv1ExceptionHandler
+        .end	exceptionHandler
 
         
         # Put EE in kernel mode
         # Restore all user regs etc
         # Restore PC? & Stack ptr
         # Restore interrupt sources
-        # Jump to EPC
-        .ent returnFromLv1Exception
-        .global returnFromLv1Exception
-returnFromLv1Exception:
+        # Jump to EPC/ErrorPC
+        .ent returnFromException
+        .global returnFromException
+returnFromException:
 
         lui     t1, 0x1
 _disable:
@@ -173,7 +193,25 @@ _disable:
 		# Restore PerfCnt @ (0x224 + (25 * 4))(k0)
 		lw      t1, 0x288(k0)
         mtc0    t1, PerfCnt
-
+		# Restore ErrorPC @ (0x224 + (30 * 4))(k0)
+		lw      t0, 0x29C(k0)
+		mtc0	t0, ErrorPC
+		
+		# Create a J to the EPC/ErrorPC at the end of this function
+		lw		t2, _exceptionLevel
+		beq		t2, zero, _createJ
+		mfc0    t2, EPC 
+		mfc0	t2, ErrorPC
+_createJ:
+		# (u32)(0x08000000 | (0x03FFFFFF & ((u32)addr >> 2)))
+		lui		t0, 0x0800
+		lui		t1, 0x3FFF
+		addiu 	t1, t1, 0xFFFF
+		sll		t2, t2, 2
+		and		t1, t1, t2
+		or		t0, t0, t1
+		sw		t0, _returnFromException_j
+		
 		# GPRs
 
 #        ori     t2, 0xff
@@ -218,13 +256,14 @@ _disable:
         lq      fp,  0x1e0(k0)
         lq      ra,  0x1f0(k0) 
 
-		# Load  EPC which has already been modified to not re-execute next the same instruction
-		lw      k0, 0x25c(k0)
+		lq      k0,  0x1a0(k0)
 
         sync.p
         ei
         sync.p
-		
-        jr      k0
+_returnFromException_j:
+        nop # jr      k0
         nop        
-        .end returnFromLv1Exception
+        .end returnFromException
+_exceptionLevel:
+.word 0x0
