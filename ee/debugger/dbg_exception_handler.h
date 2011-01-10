@@ -21,7 +21,7 @@ u32 SW_BREAK_OP;
 sw_breakpoint sw_breakpoints[MAX_SW_BREAKPOINTS];
 
 /* 128 bit GPR */
-typedef union {   
+typedef union {
 	u64 UD[2];
 	s64 SD[2];
 	u32 UL[4];
@@ -70,7 +70,7 @@ typedef union {
 			} bits;
 			u32 val;
 		} Status;
-		
+
 		union {
 			struct {
 				u32 unused0:2;
@@ -107,7 +107,7 @@ typedef union {
 typedef struct {
 	FPRreg fpr[32];		// 32bit floating point registers
 	u32 fprc[2];		// 32bit floating point control registers
-	FPRreg ACC;			// 32 bit accumulator 
+	FPRreg ACC;			// 32 bit accumulator
 } fpuRegisters;
 
 /* All preserved registers in exception handler */
@@ -167,10 +167,10 @@ fpuRegisters fpuRegs;
 /* NOP */
 #define NOP_OP		0x00000000;
 
-#define _Funct(instr)  ((instr      ) & 0x3F)  // The funct part of the instruction register 
-#define _Rd(instr)     ((instr >> 11) & 0x1F)  // The rd part of the instruction register 
-#define _Rt(instr)     ((instr >> 16) & 0x1F)  // The rt part of the instruction register 
-#define _Rs(instr)     ((instr >> 21) & 0x1F)  // The rs part of the instruction register 
+#define _Funct(instr)  ((instr      ) & 0x3F)  // The funct part of the instruction register
+#define _Rd(instr)     ((instr >> 11) & 0x1F)  // The rd part of the instruction register
+#define _Rt(instr)     ((instr >> 16) & 0x1F)  // The rt part of the instruction register
+#define _Rs(instr)     ((instr >> 21) & 0x1F)  // The rs part of the instruction register
 #define _Sa(instr)     ((instr >>  6) & 0x1F)  // The sa part of the instruction register
 #define _Im(instr)     ((u16)instr)			// The immediate part of the instruction register
 #define _Target(instr) (instr & 0x03ffffff)    // The target part of the instruction register
@@ -180,41 +180,41 @@ fpuRegisters fpuRegs;
 
 /* From SIO */
 /* Define branch and jump function codes*/
-#define BEQ_OPCODE              0x4
-#define BEQL_OPCODE             0x14
-#define BGTZ_OPCODE     		0x7
-#define BGTZL_OPCODE    		0x17
-#define BLEZ_OPCODE             0x6
-#define BLEZL_OPCODE    		0x16
-#define BNE_OPCODE              0x5
-#define BNEL_OPCODE             0x15
+#define BEQ_OPCODE			0x4
+#define BEQL_OPCODE			0x14
+#define BGTZ_OPCODE			0x7
+#define BGTZL_OPCODE		0x17
+#define BLEZ_OPCODE			0x6
+#define BLEZL_OPCODE		0x16
+#define BNE_OPCODE			0x5
+#define BNEL_OPCODE			0x15
 
 /* Reg Imm */
-#define REGIMM_OPCODE   		0x1
-#define BGEZ_OPCODE             0x1
-#define BGEZAL_OPCODE   		0x11
-#define BGEZALL_OPCODE  		0x13
-#define BGEZL_OPCODE    		0x3
-#define BLTZ_OPCODE             0
-#define BLTZAL_OPCODE   		0x10
-#define BLTZALL_OPCODE  		0x12
-#define BLTZL_OPCODE    		0x2
+#define REGIMM_OPCODE		0x1
+#define BGEZ_OPCODE			0x1
+#define BGEZAL_OPCODE		0x11
+#define BGEZALL_OPCODE		0x13
+#define BGEZL_OPCODE		0x3
+#define BLTZ_OPCODE			0
+#define BLTZAL_OPCODE		0x10
+#define BLTZALL_OPCODE		0x12
+#define BLTZL_OPCODE		0x2
 
-#define J_OPCODE                0x2
-#define JAL_OPCODE              0x3
+#define J_OPCODE			0x2
+#define JAL_OPCODE			0x3
 
 /* Special opcode */
-#define SPECIAL_OPCODE  		0
-#define JALR_OPCODE             0x9
-#define JR_OPCODE               0x8
+#define SPECIAL_OPCODE		0
+#define JALR_OPCODE			0x9
+#define JR_OPCODE			0x8
 
 /* Cop Branches (all the same) */
-#define COP0_OPCODE             0x10
-#define COP1_OPCODE             0x11
-#define COP2_OPCODE             0x12
-#define BCXF_OPCODE             0x100
-#define BCXFL_OPCODE    		0x102
-#define BCXT_OPCODE             0x101
-#define BCXTL_OPCODE    		0x103
+#define COP0_OPCODE			0x10
+#define COP1_OPCODE			0x11
+#define COP2_OPCODE			0x12
+#define BCXF_OPCODE			0x100
+#define BCXFL_OPCODE		0x102
+#define BCXT_OPCODE			0x101
+#define BCXTL_OPCODE		0x103
 
 #endif
